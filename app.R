@@ -9,7 +9,7 @@ library(tibble)
 # ----------------------------
 rle <- function(x, le = "gbd") {
   if(le == "gbd"){
-    return(c(86.02, 85.21, 81.25, 74.25, 64.75))
+    return(c(84.31, 76.76, 56.95, 35.17, 23.29))
   } else {
     return(x)
   }
@@ -75,7 +75,7 @@ stan_model_tp <- readRDS("stan_model_tp.rds")
 # UI
 # ----------------------------
 ui <- fluidPage(
-  titlePanel("NCC Burden of Disease Calculator"),
+  titlePanel(HTML("<b>NCC DALY Calculator using dModel 4.3</b>")),
   sidebarLayout(
     sidebarPanel(
       h4("Serological Test Data"),
@@ -116,7 +116,7 @@ ui <- fluidPage(
       
       h5("Symptomatic NCC Parameters (Beta distribution)"),
       fluidRow(
-        column(6, numericInput("symp_ncc_alpha", "Alpha", value = 11, min = 0)),
+        column(6, numericInput("symp_ncc_alpha", "Alpha", value = 18, min = 0)),
         column(6, numericInput("symp_ncc_beta", "Beta", value = 21, min = 0))
       ),
       
@@ -134,14 +134,14 @@ ui <- fluidPage(
       
       h5("Epilepsy Case Fatality (Uniform distribution)"),
       fluidRow(
-        column(6, numericInput("cft_ep_min", "Minimum", value = 0.033, min = 0, max = 1, step = 0.001)),
-        column(6, numericInput("cft_ep_max", "Maximum", value = 0.316, min = 0, max = 1, step = 0.001))
+        column(6, numericInput("cft_ep_min", "Minimum", value = 0.013, min = 0, max = 1, step = 0.001)),
+        column(6, numericInput("cft_ep_max", "Maximum", value = 0.066, min = 0, max = 1, step = 0.001))
       ),
       
       h5("Epilepsy Treatment Rate (Uniform distribution)"),
       fluidRow(
-        column(6, numericInput("prop_ep_trt_min", "Minimum", value = 0.25, min = 0, max = 1, step = 0.01)),
-        column(6, numericInput("prop_ep_trt_max", "Maximum", value = 0.90, min = 0, max = 1, step = 0.01))
+        column(6, numericInput("prop_ep_trt_min", "Minimum", value = 0.10, min = 0, max = 1, step = 0.01)),
+        column(6, numericInput("prop_ep_trt_max", "Maximum", value = 0.86, min = 0, max = 1, step = 0.01))
       ),
       
       h5("Disability Weights (Uniform distributions)"),
@@ -229,20 +229,18 @@ server <- function(input, output, session) {
       n <- 500
       
       # Use user inputs or defaults for parameters
-      symp_ncc_alpha <- ifelse(is.na(input$symp_ncc_alpha) || input$symp_ncc_alpha == "", 11, input$symp_ncc_alpha)
+      symp_ncc_alpha <- ifelse(is.na(input$symp_ncc_alpha) || input$symp_ncc_alpha == "", 18, input$symp_ncc_alpha)
       symp_ncc_beta <- ifelse(is.na(input$symp_ncc_beta) || input$symp_ncc_beta == "", 21, input$symp_ncc_beta)
       ncc_ep_alpha <- ifelse(is.na(input$ncc_ep_alpha) || input$ncc_ep_alpha == "", 122, input$ncc_ep_alpha)
       ncc_ep_beta <- ifelse(is.na(input$ncc_ep_beta) || input$ncc_ep_beta == "", 45, input$ncc_ep_beta)
       ncc_hd_alpha <- ifelse(is.na(input$ncc_hd_alpha) || input$ncc_hd_alpha == "", 53, input$ncc_hd_alpha)
       ncc_hd_beta <- ifelse(is.na(input$ncc_hd_beta) || input$ncc_hd_beta == "", 155, input$ncc_hd_beta)
       
-      cft_ep_min <- ifelse(is.na(input$cft_ep_min) || input$cft_ep_min == "", 0.033, input$cft_ep_min)
-      cft_ep_max <- ifelse(is.na(input$cft_ep_max) || input$cft_ep_max == "", 0.316, input$cft_ep_max)
-      prop_ep_trt_min <- ifelse(is.na(input$prop_ep_trt_min) || input$prop_ep_trt_min == "", 0.25, input$prop_ep_trt_min)
-      prop_ep_trt_max <- ifelse(is.na(input$prop_ep_trt_max) || input$prop_ep_trt_max == "", 0.90, input$prop_ep_trt_max)
+      cft_ep_min <- ifelse(is.na(input$cft_ep_min) || input$cft_ep_min == "", 0.013, input$cft_ep_min)
+      cft_ep_max <- ifelse(is.na(input$cft_ep_max) || input$cft_ep_max == "", 0.066, input$cft_ep_max)
+      prop_ep_trt_min <- ifelse(is.na(input$prop_ep_trt_min) || input$prop_ep_trt_min == "", 0.10, input$prop_ep_trt_min)
+      prop_ep_trt_max <- ifelse(is.na(input$prop_ep_trt_max) || input$prop_ep_trt_max == "", 0.86, input$prop_ep_trt_max)
       
-      K <- ifelse(is.na(input$K_value) || input$K_value == "", 0, input$K_value)
-      r <- ifelse(is.na(input$r_value) || input$r_value == "", 0, input$r_value)
       
       dsw_ep_tr_min <- ifelse(is.na(input$dsw_ep_tr_min) || input$dsw_ep_tr_min == "", 0.031, input$dsw_ep_tr_min)
       dsw_ep_tr_max <- ifelse(is.na(input$dsw_ep_tr_max) || input$dsw_ep_tr_max == "", 0.072, input$dsw_ep_tr_max)
@@ -339,45 +337,45 @@ server <- function(input, output, session) {
       # Create parameter summary table with mean and 95% BCI
       results$parameters_used <- tibble::tibble(
         Parameter = c(
-          "NCC Seroprevalence",
-          "Symptomatic NCC",
-          "NCC Epilepsy",
-          "NCC Headache",
-          "Case Fatality Rate",
-          "Epilepsy Treatment Rate",
+          "NCC Prevalence (%)",
+          "Symptomatic NCC (%)",
+          "NCC with Epilepsy (%)",
+          "NCC with Headache (%)",
+          "Case Fatality of epilepsy (%)",
+          "Percentage of treated epilepsy (%)",
           "DW Epilepsy Treated",
           "DW Epilepsy Not Treated", 
           "DW Headache"
         ),
         Mean = c(
-          mean(posterior_samples$pi),
-          mean(symp_ncc),
-          mean(ncc_ep),
-          mean(ncc_hd),
-          mean(cft_ep),
-          mean(prop_ep_trt),
+          mean(posterior_samples$pi)*100,
+          mean(symp_ncc)*100,
+          mean(ncc_ep)*100,
+          mean(ncc_hd)*100,
+          mean(cft_ep)*100,
+          mean(prop_ep_trt)*100,
           mean(dsw_ep_tr),
           mean(dsw_ep_nt),
           mean(dsw_hd)
         ),
         `Lower 95% BCI` = c(
-          quantile(posterior_samples$pi, 0.025),
-          quantile(symp_ncc, 0.025),
-          quantile(ncc_ep, 0.025),
-          quantile(ncc_hd, 0.025),
-          quantile(cft_ep, 0.025),
-          quantile(prop_ep_trt, 0.025),
+          quantile(posterior_samples$pi, 0.025)*100,
+          quantile(symp_ncc, 0.025)*100,
+          quantile(ncc_ep, 0.025)*100,
+          quantile(ncc_hd, 0.025)*100,
+          quantile(cft_ep, 0.025)*100,
+          quantile(prop_ep_trt, 0.025)*100,
           quantile(dsw_ep_tr, 0.025),
           quantile(dsw_ep_nt, 0.025),
           quantile(dsw_hd, 0.025)
         ),
         `Upper 95% BCI` = c(
-          quantile(posterior_samples$pi, 0.975),
-          quantile(symp_ncc, 0.975),
-          quantile(ncc_ep, 0.975),
-          quantile(ncc_hd, 0.975),
-          quantile(cft_ep, 0.975),
-          quantile(prop_ep_trt, 0.975),
+          quantile(posterior_samples$pi, 0.975)*100,
+          quantile(symp_ncc, 0.975)*100,
+          quantile(ncc_ep, 0.975)*100,
+          quantile(ncc_hd, 0.975)*100,
+          quantile(cft_ep, 0.975)*100,
+          quantile(prop_ep_trt, 0.975)*100,
           quantile(dsw_ep_tr, 0.975),
           quantile(dsw_ep_nt, 0.975),
           quantile(dsw_hd, 0.975)
