@@ -1,0 +1,13 @@
+name: DALY_dModel_4
+title: DALY_dModel_4
+username: baty2025
+account: baty2025
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 15713028
+bundleId: 11014596
+url: https://baty2025.shinyapps.io/DALY_dModel_4/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: LICENSE|model.R|README.md

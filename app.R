@@ -24,24 +24,23 @@ burden <- function(N, DW, A, L, K, r, a) {
 
 mean_ci <- function(x) c(mean(x), quantile(x, 0.025), quantile(x, 0.975))
 
-# ----------------------------
-# Precompile Stan Model
-# ----------------------------
-stan_model_tp <- stan_model(model_code = "
-data {
-  int<lower=0> T_pos;
-  int<lower=0> N;
-  real<lower=0, upper=1> Se;
-  real<lower=0, upper=1> Sp;
-}
-parameters {
-  real<lower=0, upper=1> pi;
-}
-model {
-  T_pos ~ binomial(N, pi * Se + (1 - pi) * (1 - Sp));
-  pi ~ beta(1, 1);
-}
-")
+# stan_model_tp <- stan_model(model_code = "
+# data {
+#   int<lower=0> T_pos;
+#   int<lower=0> N;
+#   real<lower=0, upper=1> Se;
+#   real<lower=0, upper=1> Sp;
+# }
+# parameters {
+#   real<lower=0, upper=1> pi;
+# }
+# model {
+#   T_pos ~ binomial(N, pi * Se + (1 - pi) * (1 - Sp));
+#   pi ~ beta(1, 1);
+# }
+# ")
+
+stan_model_tp <- readRDS("stan_model_tp.rds")
 
 # ----------------------------
 # UI
