@@ -19,8 +19,6 @@ burden <- function(N, DW, A, L, K, r, a) {
   N * DW * L
 }
 
-
-
 mean_ci <- function(x) c(mean(x), quantile(x, 0.025), quantile(x, 0.975))
 
 # Sensitivity analysis functions
@@ -75,14 +73,63 @@ stan_model_tp <- readRDS("stan_model_tp.rds")
 # UI
 # ----------------------------
 ui <- fluidPage(
-  titlePanel(HTML("<b>NCC DALY Calculator using dModel 4.3</b>")),
+  tags$head(
+    tags$style(HTML("
+      /* Title styling */
+      .title-panel {
+        background: linear-gradient(135deg, #2c3e50, #3498db);
+        color: white;
+        padding: 20px;
+        text-align: left;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        margin-left: -30px;   
+        margin-right: -30px;
+        font-weight: bold;
+        font-family: 'Poppins', sans-serif;
+      }
+      .title-panel h2 {
+        font-weight: 700;
+        font-size: 28px;
+        margin: 0;
+        text-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+      }
+      /* Custom styling */
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      }
+      .well {
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+      }
+      .btn-primary {
+        background-color: #2c3e50;
+        border-color: #2c3e50;
+      }
+      h4 {
+        color: #2c3e50;
+        border-bottom: 2px solid #3498db;
+        padding-bottom: 8px;
+      }
+      .nav-tabs > li > a {
+        color: #2c3e50;
+        font-weight: bold;
+      }
+    "))
+  ),
+  
+  div(class = "title-panel",
+      h2("NCC DALY Calculator using Transitional Model")
+  ),
   sidebarLayout(
     sidebarPanel(
+      width = 3,
       h4("Serological Test Data"),
-      numericInput("N_tested", "Number of People Tested", value = 1063, min = 0),
-      numericInput("N_positive", "Number of Positive Tests", value = 169, min = 0),
-      sliderInput("sensitivity", "Test Sensitivity", value = 69.3, min = 0, max = 100),
-      sliderInput("specificity", "Test Specificity", value = 97, min = 0, max = 100),
+      numericInput("N_tested", "Number of People Tested", value = 694, min = 0),
+      numericInput("N_positive", "Number of Positive Tests", value = 11, min = 0),
+      sliderInput("sensitivity", "Test Sensitivity", value = 98, min = 0, max = 100),
+      sliderInput("specificity", "Test Specificity", value = 100, min = 0, max = 100),
       actionButton("calculate", "Calculate Burden", class = "btn-primary"),
       
       h4("Population Data"),
@@ -111,8 +158,8 @@ ui <- fluidPage(
       ),
       numericInput("female_age5", "65+", value = 0.081, min = 0, max = 1, step = 0.01),
       
-      h4("Disease Parameters (Optional)"),
-      p("Leave blank to use default values"),
+      h4("Disease Parameters"),
+      # p("Defaults values are based on studies from India"),
       
       h5("Symptomatic NCC Parameters (Beta distribution)"),
       fluidRow(
@@ -132,16 +179,16 @@ ui <- fluidPage(
         column(6, numericInput("ncc_hd_beta", "Beta", value = 155, min = 0))
       ),
       
-      h5("Epilepsy Case Fatality (Uniform distribution)"),
+      h5("Epilepsy Case Fatality (Beta distribution)"),
       fluidRow(
-        column(6, numericInput("cft_ep_min", "Minimum", value = 0.013, min = 0, max = 1, step = 0.001)),
-        column(6, numericInput("cft_ep_max", "Maximum", value = 0.066, min = 0, max = 1, step = 0.001))
+        column(6, numericInput("cft_ep_alpha", "Alpha", value = 6, min = 0)),
+        column(6, numericInput("cft_ep_beta", "Beta", value = 169, min = 0))
       ),
       
       h5("Epilepsy Treatment Rate (Uniform distribution)"),
       fluidRow(
-        column(6, numericInput("prop_ep_trt_min", "Minimum", value = 0.10, min = 0, max = 1, step = 0.01)),
-        column(6, numericInput("prop_ep_trt_max", "Maximum", value = 0.86, min = 0, max = 1, step = 0.01))
+        column(6, numericInput("prop_ep_trt_min", "Min", value = 0.10, min = 0, max = 1, step = 0.01)),
+        column(6, numericInput("prop_ep_trt_max", "Max", value = 0.86, min = 0, max = 1, step = 0.01))
       ),
       
       h5("Disability Weights (Uniform distributions)"),
@@ -159,28 +206,70 @@ ui <- fluidPage(
       fluidRow(
         column(6, numericInput("dsw_hd_min", "Min", value = 0.022, min = 0, max = 1, step = 0.001)),
         column(6, numericInput("dsw_hd_max", "Max", value = 0.588, min = 0, max = 1, step = 0.001))
+      ),
+      h5("Set Iterations"),
+      fluidRow(
+        column(12, numericInput("iter", "Iteration (Min = 100)", value = 10000, min = 100, step = 100))
+      ),
+      h5("Set Test Sensitivity Range (For P vs DALYs Plot)"),
+      fluidRow(
+        column(6, numericInput("se_min", "Min (0 - 1)", value = 0.6, min = 0, max = 1, step = 0.05)),
+        column(6, numericInput("se_max", "Max (0 - 1)", value = 1.0, min = 0, max = 1, step = 0.05))
+      ),
+      h5("Set Test Specificity Range (For P vs DALYs Plot)"),
+      fluidRow(
+        column(6, numericInput("sp_min", "Min (0 - 1)", value = 0.6, min = 0, max = 1, step = 0.05)),
+        column(6, numericInput("sp_max", "Max (0 - 1)", value = 1.0, min = 0, max = 1, step = 0.05))
       )
     ),
-    
+
     mainPanel(
+      width = 9,
       tabsetPanel(
+        # ... all your tabs ...
         tabPanel("Results Summary", 
-                 tableOutput("results_table"), 
-                 downloadButton("download_summary", "Download Summary CSV")),
+                 fluidRow(
+                   column(6, 
+                          div(style = "font-size: 12px;",
+                              tableOutput("results_table")
+                          ),
+                          conditionalPanel(
+                            condition = "output.results_ready",
+                            downloadButton("download_summary", "Download Summary CSV")
+                          )
+                   ),
+                   column(6,
+                          plotOutput("prevalence_daly_plot"),
+                          conditionalPanel(
+                            condition = "output.plot_ready",
+                            tagList(
+                              downloadButton("download_prevalence_daly_data", "Download Prevalence-DALY Data"),
+                              downloadButton("download_prevalence_plot_png", "Download Plot (PNG)"),
+                              downloadButton("download_prevalence_plot_pdf", "Download Plot (PDF)")
+                            )
+                          )
+                   )
+                 )),
         tabPanel("DALYs by Age Group", 
                  plotOutput("daly_plot"), 
                  downloadButton("download_daly_data", "Download DALY Data")),
+        
         tabPanel("Sensitivity Analysis", 
                  plotOutput("sensitivity_plot"),
                  downloadButton("download_sens_plot_png", "Download Plot (PNG)"),
                  downloadButton("download_sens_plot_pdf", "Download Plot (PDF)")),
         tabPanel("Parameter Summary",
                  tableOutput("parameter_table"),
-                 downloadButton("download_parameters", "Download Parameters CSV"))
+                 downloadButton("download_parameters", "Download Parameters CSV")),
+        tabPanel("Model",
+                 img(src= "model_4.3.jpg", height = "600px", alt = "Flow chart of computational disease model for dModel 4.3"),
+                 p(HTML("<b>Figure: Computational disease model followed in this app.</b>")))# ... other tabs ...
       )
     )
   )
 )
+
+
 
 # ----------------------------
 # Server
@@ -191,14 +280,15 @@ server <- function(input, output, session) {
     summary_data = NULL,
     sensitivity_data = NULL,
     parameters_used = NULL,
-    sampled_parameters = NULL
+    sampled_parameters = NULL,
+    prevalence_daly_data = NULL
   )
   
   observeEvent(input$calculate, {
-    showNotification("Calculating burden... This may take a few minutes.", type = "message")
+    #showNotification("Calculating burden... This may take a few minutes.", type = "message")
     
-    withProgress(message = 'Running analysis', value = 0, {
-      incProgress(0.1, detail = "Processing population data")
+    withProgress(message = 'Analyzing, Please wait for few seconds!!', value = 0, {
+      incProgress(0.1, detail = "..")
       
       total_male <- input$total_pop * input$prop_m
       total_female <- input$total_pop - total_male
@@ -211,7 +301,7 @@ server <- function(input, output, session) {
       pop_mx[,2] <- total_female * female_prop_per_age
       pop_mx <- matrix(pop_mx, nrow = 10, ncol = 1)
       
-      incProgress(0.3, detail = "Sampling seroprevalence with Stan")
+      incProgress(0.3, detail = " ")
       stan_data <- list(
         T_pos = input$N_positive,
         N = input$N_tested,
@@ -219,14 +309,14 @@ server <- function(input, output, session) {
         Sp = input$specificity / 100
       )
       
-      fit <- sampling(stan_model_tp, data = stan_data, chains = 1, iter = 200, warmup = 100, seed = 123, refresh = 0)
+      fit <- sampling(stan_model_tp, data = stan_data, chains = 4, iter = input$iter, warmup = input$iter/2, seed = 123, refresh = 0)
       posterior_samples <- rstan::extract(fit)
       bci <- quantile(posterior_samples$pi, probs = c(0.025, 0.975))
       
-      incProgress(0.6, detail = "Calculating burden of disease")
+      incProgress(0.6, detail = " ")
       
       set.seed(123)
-      n <- 500
+      n <- 10000
       
       # Use user inputs or defaults for parameters
       symp_ncc_alpha <- ifelse(is.na(input$symp_ncc_alpha) || input$symp_ncc_alpha == "", 18, input$symp_ncc_alpha)
@@ -236,11 +326,10 @@ server <- function(input, output, session) {
       ncc_hd_alpha <- ifelse(is.na(input$ncc_hd_alpha) || input$ncc_hd_alpha == "", 53, input$ncc_hd_alpha)
       ncc_hd_beta <- ifelse(is.na(input$ncc_hd_beta) || input$ncc_hd_beta == "", 155, input$ncc_hd_beta)
       
-      cft_ep_min <- ifelse(is.na(input$cft_ep_min) || input$cft_ep_min == "", 0.013, input$cft_ep_min)
-      cft_ep_max <- ifelse(is.na(input$cft_ep_max) || input$cft_ep_max == "", 0.066, input$cft_ep_max)
+      cft_ep_alpha <- ifelse(is.na(input$cft_ep_alpha) || input$cft_ep_alpha == "", 6, input$cft_ep_alpha)
+      cft_ep_beta <- ifelse(is.na(input$cft_ep_beta) || input$cft_ep_beta == "", 169, input$cft_ep_beta)
       prop_ep_trt_min <- ifelse(is.na(input$prop_ep_trt_min) || input$prop_ep_trt_min == "", 0.10, input$prop_ep_trt_min)
       prop_ep_trt_max <- ifelse(is.na(input$prop_ep_trt_max) || input$prop_ep_trt_max == "", 0.86, input$prop_ep_trt_max)
-      
       
       dsw_ep_tr_min <- ifelse(is.na(input$dsw_ep_tr_min) || input$dsw_ep_tr_min == "", 0.031, input$dsw_ep_tr_min)
       dsw_ep_tr_max <- ifelse(is.na(input$dsw_ep_tr_max) || input$dsw_ep_tr_max == "", 0.072, input$dsw_ep_tr_max)
@@ -254,7 +343,7 @@ server <- function(input, output, session) {
       symp_ncc <- rbeta(n, symp_ncc_alpha, symp_ncc_beta)
       ncc_ep <- rbeta(n, ncc_ep_alpha, ncc_ep_beta)
       ncc_hd <- rbeta(n, ncc_hd_alpha, ncc_hd_beta)
-      cft_ep <- runif(n, cft_ep_min, cft_ep_max)
+      cft_ep <- rbeta(n, cft_ep_alpha, cft_ep_beta)
       prop_ep_trt <- runif(n, prop_ep_trt_min, prop_ep_trt_max)
       
       # Store sampled parameters for sensitivity analysis
@@ -277,7 +366,7 @@ server <- function(input, output, session) {
       N_prev_ncc_ep_mrt <- t(apply(pop_mx, 1, function(x) x * prev_ncc_ep_act*cft_ep))
       
       # YLL calculation
-      ep_aad <- c(2, 9.5, 29.5, 52, 65)
+      ep_aad <- c(2, 9.5, 29.5, 52, 73)
       ep_rle <- rle(ep_aad, "gbd")
       
       yll_ep <- array(dim = c(5,2,n))
@@ -453,10 +542,117 @@ server <- function(input, output, session) {
           mean_ci(yll_ep_all / daly)[3]
         )
       )
+      
+      # Generate prevalence vs DALY data
+      incProgress(0.8, detail = " ")
+      generate_prevalence_daly_data()
     })
     
     showNotification("Calculation complete!", type = "message")
   })
+  
+  
+  
+  
+  # Function to generate prevalence vs DALY data
+  generate_prevalence_daly_data <- function() {
+    req(input$N_tested, input$total_pop)
+    
+    se_min <- ifelse(is.na(input$se_min) || input$se_min == "", 0.6, input$se_min)
+    se_max <- ifelse(is.na(input$se_max) || input$se_max == "", 1.0, input$se_max)
+    sp_min <- ifelse(is.na(input$sp_min) || input$sp_min == "", 0.6, input$sp_min)
+    sp_max <- ifelse(is.na(input$sp_max) || input$sp_max == "", 1.0, input$sp_max)
+
+    
+    # Define reasonable ranges for sensitivity and specificity
+    se_range <- seq(input$se_min, input$se_max, by = 0.05)
+    sp_range <- seq(input$sp_min, input$sp_max, by = 0.05) 
+    
+    prevalence_daly_points <- list()
+    point_counter <- 1
+    
+    # Sample multiple combinations of Se and Sp
+    for(i in 1:200) {
+      se_sample <- sample(se_range, 1)
+      sp_sample <- sample(sp_range, 1)
+      
+      # Calculate prevalence using the Stan model
+      stan_data_sample <- list(
+        T_pos = input$N_positive,
+        N = input$N_tested,
+        Se = se_sample,
+        Sp = sp_sample
+      )
+      
+      # Use tryCatch to handle potential Stan errors
+      tryCatch({
+        fit_sample <- sampling(stan_model_tp, data = stan_data_sample, 
+                               chains = 2, iter = 2000, warmup = 1000, 
+                               seed = 123 + i, refresh = 0)
+        posterior_samples_sample <- rstan::extract(fit_sample)
+        prevalence <- median(posterior_samples_sample$pi)
+        
+        # Calculate DALYs for this prevalence (simplified calculation)
+        # Using the same burden calculation approach as main analysis
+        daly_estimate <- calculate_daly_for_prevalence(prevalence, input$total_pop)
+        
+        prevalence_daly_points[[point_counter]] <- data.frame(
+          Prevalence = prevalence * 100,  # Convert to percentage
+          DALYs = daly_estimate,
+          Sensitivity = se_sample * 100,
+          Specificity = sp_sample * 100
+        )
+        point_counter <- point_counter + 1
+      }, error = function(e) {
+        # Skip this iteration if Stan fails
+        message("Stan sampling failed for combination: Se=", se_sample, ", Sp=", sp_sample)
+      })
+    }
+    
+    if(length(prevalence_daly_points) > 0) {
+      results$prevalence_daly_data <- do.call(rbind, prevalence_daly_points)
+    }
+  }
+  
+  # Helper function to calculate DALYs for a given prevalence
+
+  calculate_daly_for_prevalence <- function(prevalence, total_pop) {
+    # Use the same parameter values as the main analysis
+    symp_ncc <- mean(results$sampled_parameters$symp_ncc)
+    ncc_ep <- mean(results$sampled_parameters$ncc_ep)
+    ncc_hd <- mean(results$sampled_parameters$ncc_hd)
+    cft_ep <- mean(results$sampled_parameters$cft_ep)
+    prop_ep_trt <- mean(results$sampled_parameters$prop_ep_trt)
+    dsw_ep_tr <- mean(results$sampled_parameters$dsw_ep_tr)
+    dsw_ep_nt <- mean(results$sampled_parameters$dsw_ep_nt)
+    dsw_hd <- mean(results$sampled_parameters$dsw_hd)
+    
+    # More accurate burden calculation matching your main model
+    ncc_cases <- total_pop * prevalence
+    symp_ncc_cases <- ncc_cases * symp_ncc
+    ep_cases <- symp_ncc_cases * ncc_ep
+    hd_cases <- symp_ncc_cases * ncc_hd
+    
+    # Deaths from epilepsy
+    deaths <- ep_cases * cft_ep
+    
+    # YLL calculation (using same approach as main model)
+    # Use average life expectancy for simplicity
+    avg_life_expectancy <- 70
+    yll <- deaths * avg_life_expectancy
+    
+    # YLD calculation (using same approach as main model)
+    treated_ep_cases <- ep_cases * prop_ep_trt
+    untreated_ep_cases <- ep_cases * (1 - prop_ep_trt)
+    
+    yld_ep <- (treated_ep_cases * dsw_ep_tr) + (untreated_ep_cases * dsw_ep_nt)
+    yld_hd <- hd_cases * dsw_hd
+    
+    total_yld <- yld_ep + yld_hd
+    total_daly <- yll + total_yld
+    
+    return(total_daly)
+  }
   
   # ----------------------------
   # Plots and Tables
@@ -479,6 +675,80 @@ server <- function(input, output, session) {
     }
   })
   
+  output$prevalence_daly_plot <- renderPlot({
+    if(!is.null(results$prevalence_daly_data)) {
+      ggplot(results$prevalence_daly_data, aes(x = Prevalence, y = DALYs)) +
+        geom_point(aes(color = Sensitivity, size = Specificity), alpha = 0.7) +
+        geom_smooth(method = "lm", se = TRUE, color = "red", linetype = "dashed") +
+        labs(
+          title = "Relationship between NCC Prevalence and DALYs (n = 200)",
+          x = "NCC Prevalence (%)",
+          y = "Total DALYs",
+          color = "Sensitivity (%)",
+          size = "Specificity (%)"
+        ) +
+        theme_minimal() +
+        scale_y_continuous(labels = scales::comma) +
+        scale_color_gradient(low = "blue", high = "red") +
+        theme(
+          legend.position = "right",
+          plot.title = element_text(hjust = 0.5, face = "bold")
+        )
+    }
+  })
+  output$download_prevalence_plot_png <- downloadHandler(
+    filename = function() {
+      paste0("prevalence_daly_plot_", Sys.Date(), ".png")
+    },
+    content = function(file) {
+      req(results$prevalence_daly_data)
+      p <- ggplot(results$prevalence_daly_data, aes(x = Prevalence, y = DALYs)) +
+        geom_point(aes(color = Sensitivity, size = Specificity), alpha = 0.7) +
+        geom_smooth(method = "lm", se = TRUE, color = "red", linetype = "dashed") +
+        labs(
+          title = "Relationship between NCC Prevalence and DALYs",
+          x = "NCC Prevalence (%)",
+          y = "Total DALYs",
+          color = "Sensitivity (%)",
+          size = "Specificity (%)"
+        ) +
+        theme_minimal() +
+        scale_y_continuous(labels = scales::comma) +
+        scale_color_gradient(low = "blue", high = "red") +
+        theme(
+          legend.position = "right",
+          plot.title = element_text(hjust = 0.5, face = "bold")
+        )
+      ggsave(file, plot = p, device = "png", width = 10, height = 8, dpi = 300)
+    }
+  )
+  
+  output$download_prevalence_plot_pdf <- downloadHandler(
+    filename = function() {
+      paste0("prevalence_daly_plot_", Sys.Date(), ".pdf")
+    },
+    content = function(file) {
+      req(results$prevalence_daly_data)
+      p <- ggplot(results$prevalence_daly_data, aes(x = Prevalence, y = DALYs)) +
+        geom_point(aes(color = Sensitivity, size = Specificity), alpha = 0.7) +
+        geom_smooth(method = "lm", se = TRUE, color = "red", linetype = "dashed") +
+        labs(
+          title = "Relationship between NCC Prevalence and DALYs",
+          x = "NCC Prevalence (%)",
+          y = "Total DALYs",
+          color = "Sensitivity (%)",
+          size = "Specificity (%)"
+        ) +
+        theme_minimal() +
+        scale_y_continuous(labels = scales::comma) +
+        scale_color_gradient(low = "blue", high = "red") +
+        theme(
+          legend.position = "right",
+          plot.title = element_text(hjust = 0.5, face = "bold")
+        )
+      ggsave(file, plot = p, device = "pdf", width = 10, height = 8)
+    }
+  )
   output$results_table <- renderTable({
     results$summary_data
   }, bordered=TRUE, align='l')
@@ -555,10 +825,30 @@ server <- function(input, output, session) {
       tornado(sa_daly_pcc, daly_items)
     }
   })
+ 
+  # Add these reactive outputs
+  output$results_ready <- reactive({
+    !is.null(results$summary_data)
+  })
+  outputOptions(output, "results_ready", suspendWhenHidden = FALSE)
   
-
+  output$plot_ready <- reactive({
+    !is.null(results$prevalence_daly_data)
+  })
+  outputOptions(output, "plot_ready", suspendWhenHidden = FALSE)  
   
-  # Add these new download handlers to the server function
+   
+  # Download handlers
+  output$download_prevalence_daly_data <- downloadHandler(
+    filename = function() {
+      paste0("prevalence_daly_relationship_", Sys.Date(), ".csv")
+    },
+    content = function(file) {
+      req(results$prevalence_daly_data)
+      write.csv(results$prevalence_daly_data, file, row.names = FALSE)
+    }
+  )
+  
   output$download_sens_plot_png <- downloadHandler(
     filename = function() {
       paste0("sensitivity_analysis_", Sys.Date(), ".png")
