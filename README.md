@@ -52,7 +52,7 @@ This will launch the Shiny app in your default web browser.
 
 -   Click the **“Calculate Burden”** button to generate DALY estimates and probabilistic sensitivity analysis results. Example outputs:
 
-    \![Results](https://github.com/Baty2025/DALY_dModel_4.3_app/blob/main/WWW/results.PNG)
+    ![Results](https://github.com/Baty2025/DALY_dModel_4.3_app/blob/main/WWW/results.PNG)
 
 -   Additional analyses can be viewed in subsequent tabs or panes.
 
@@ -68,8 +68,6 @@ Given this limitation, this app allows users to first calculate DALYs using the 
 
 If you use this app in your research, please cite:
 
-> 
->
 > Mohammad Shah Jalal, University of Montreal (2025). *DALY_dModel_4.3_app: A Shiny Application for Estimating the Burden of Neurocysticercosis.*\
 > GitHub repository: <https://github.com/Baty2025/DALY_dModel_4.3_app>
 
