@@ -45,7 +45,9 @@ This will bring you to the app's interface.
 ## Calculate DALY
 
 -   You will see all of required data have already been auto populated. These data are collected for Indian context and given in the app as an example data set.
--   If you click, "Calculate Burden" button, the app will give you the summary results and probabilistic sensitivity analysis in the main pane. You will see some more analysis in subsequent panes.
+-   If you click, "Calculate Burden" button, the app will give you the summary results and probabilistic sensitivity analysis in the main pane, as like as:
+![Results](https://github.com/Baty2025/DALY_dModel_4.3_app/blob/main/WWW/results.PNG)
+-   You will see some more analysis in subsequent panes.
 -   You can change any values from left side bar and recalculate the burden.
 
 # Why this app?
