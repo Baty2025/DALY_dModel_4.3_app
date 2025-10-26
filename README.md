@@ -10,6 +10,8 @@ This Shiny application calculates **Disability-Adjusted Life Years (DALYs)** usi
 
 The underlying concepts and disease progression structure are represented in the following computational model: ![Model](https://github.com/Baty2025/DALY_dModel_4.3_app/blob/main/WWW/model_4.3.jpg)
 
+You can create similar model [here](https://baty2025.shinyapps.io/Code/)
+
 # **How to use this app**
 
 ### **1. Clone the repository**
