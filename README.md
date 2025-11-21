@@ -64,7 +64,7 @@ This will launch the Shiny app in your default web browser.
 
 Typically, NCC-associated DALYs are calculated using an attributional model. *dModel 4.3* is a hypothetical framework designed to work when highly granular data on NCC prevalence in the population are available. However, such detailed estimates remain out of reach because there is currently no rapid, non-imaging test to measure NCC prevalence in the general population. Brain imaging—the only reliable diagnostic tool—cannot ethically be applied to asymptomatic individuals.
 
-Given this limitation, this app allows users to first calculate DALYs using the data they currently have. Then, they can adjust different neurological parameters to explore how these changes impact the overall DALY estimates. This interactive approach makes it easier to visualize and understand how NCC-associated DALY estimates vary under different assumptions.
+Given this limitation, this app allows users to first calculate DALYs using the data they currently have. Then, they can adjust different epidemiological parameters to explore how these changes impact the overall DALY estimates. This interactive approach makes it easier to visualize and understand how NCC-associated DALY estimates vary under different assumptions.
 
 ## **Citation**
 
