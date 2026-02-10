@@ -4,12 +4,21 @@ library(dplyr)
 library(rstan)
 library(tibble)
 
+# Memory optimization for shinyapps.io
+options(mc.cores = 1)  # Use only 1 core
+rstan_options(auto_write = TRUE)
+
+# Reduce memory usage
+invisible(gc())  # Garbage collect
+
 # ----------------------------
 # Helper Functions
 # ----------------------------
-rle <- function(x, le = "gbd") {
+rle <- function(x, le = "gbd", custom_rle = NULL) {
   if(le == "gbd"){
     return(c(84.31, 76.76, 56.95, 35.17, 23.29))
+  } else if (le == "custom" && !is.null(custom_rle)) {
+    return(custom_rle)
   } else {
     return(x)
   }
@@ -158,8 +167,28 @@ ui <- fluidPage(
       ),
       numericInput("female_age5", "65+", value = 0.081, min = 0, max = 1, step = 0.01),
       
+      h4("Life Expectancy Parameters"),
+      radioButtons("rle_source", "Remaining Life Expectancy (RLE) Source:",
+                   choices = list("Use GBD defaults" = "gbd",
+                                  "Enter custom values" = "custom"),
+                   selected = "gbd", inline = TRUE),
+      conditionalPanel(
+        condition = "input.rle_source == 'custom'",
+        h5("Custom RLE Values (in years)"),
+        p("Enter remaining life expectancy for each age group:"),
+        fluidRow(
+          column(6, numericInput("rle_age1", "0-4", value = 84.31, min = 0, max = 120, step = 0.01)),
+          column(6, numericInput("rle_age2", "5-14", value = 76.76, min = 0, max = 120, step = 0.01))
+        ),
+        fluidRow(
+          column(6, numericInput("rle_age3", "15-44", value = 56.95, min = 0, max = 120, step = 0.01)),
+          column(6, numericInput("rle_age4", "45-64", value = 35.17, min = 0, max = 120, step = 0.01))
+        ),
+        numericInput("rle_age5", "65+", value = 23.29, min = 0, max = 120, step = 0.01),
+        helpText("GBD default values: 84.31, 76.76, 56.95, 35.17, 23.29 years")
+      ),
+      
       h4("Disease Parameters"),
-      # p("Defaults values are based on studies from India"),
       
       h5("Symptomatic NCC Parameters (Beta distribution)"),
       fluidRow(
@@ -207,6 +236,7 @@ ui <- fluidPage(
         column(6, numericInput("dsw_hd_min", "Min", value = 0.022, min = 0, max = 1, step = 0.001)),
         column(6, numericInput("dsw_hd_max", "Max", value = 0.588, min = 0, max = 1, step = 0.001))
       ),
+      h4("Model Iteration Data"),
       h5("Set Iterations"),
       fluidRow(
         column(12, numericInput("iter", "Iteration (Min = 100)", value = 10000, min = 100, step = 100))
@@ -222,11 +252,10 @@ ui <- fluidPage(
         column(6, numericInput("sp_max", "Max (0 - 1)", value = 1.0, min = 0, max = 1, step = 0.05))
       )
     ),
-
+    
     mainPanel(
       width = 9,
       tabsetPanel(
-        # ... all your tabs ...
         tabPanel("Results Summary", 
                  fluidRow(
                    column(6, 
@@ -263,13 +292,11 @@ ui <- fluidPage(
                  downloadButton("download_parameters", "Download Parameters CSV")),
         tabPanel("Model",
                  img(src= "model_4.3.jpg", height = "600px", alt = "Flow chart of computational disease model for dModel 4.3"),
-                 p(HTML("<b>Figure: Computational disease model followed in this app.</b>")))# ... other tabs ...
+                 p(HTML("<b>Figure: Computational disease model followed in this app.</b>")))
       )
     )
   )
 )
-
-
 
 # ----------------------------
 # Server
@@ -281,12 +308,11 @@ server <- function(input, output, session) {
     sensitivity_data = NULL,
     parameters_used = NULL,
     sampled_parameters = NULL,
-    prevalence_daly_data = NULL
+    prevalence_daly_data = NULL,
+    current_params = list()  # Store current parameter values
   )
   
   observeEvent(input$calculate, {
-    #showNotification("Calculating burden... This may take a few minutes.", type = "message")
-    
     withProgress(message = 'Analyzing, Please wait for few seconds!!', value = 0, {
       incProgress(0.1, detail = "..")
       
@@ -309,7 +335,7 @@ server <- function(input, output, session) {
         Sp = input$specificity / 100
       )
       
-      fit <- sampling(stan_model_tp, data = stan_data, chains = 4, iter = input$iter, warmup = input$iter/2, seed = 123, refresh = 0)
+      fit <- sampling(stan_model_tp, data = stan_data, chains = 2, iter = input$iter, warmup = input$iter/2, seed = 123, refresh = 0)
       posterior_samples <- rstan::extract(fit)
       bci <- quantile(posterior_samples$pi, probs = c(0.025, 0.975))
       
@@ -357,6 +383,15 @@ server <- function(input, output, session) {
         cft_ep = cft_ep
       )
       
+      # Store current parameter means for use in prevalence-DALY calculation
+      results$current_params <- list(
+        symp_ncc = mean(symp_ncc),
+        ncc_ep = mean(ncc_ep),
+        ncc_hd = mean(ncc_hd),
+        cft_ep = mean(cft_ep),
+        prop_ep_trt = mean(prop_ep_trt)
+      )
+      
       prev_ncc_symp <- prev_ncc * symp_ncc
       prev_ncc_ep_act <- prev_ncc * symp_ncc * ncc_ep
       prev_ncc_hd <- prev_ncc * symp_ncc * ncc_hd
@@ -367,7 +402,25 @@ server <- function(input, output, session) {
       
       # YLL calculation
       ep_aad <- c(2, 9.5, 29.5, 52, 73)
-      ep_rle <- rle(ep_aad, "gbd")
+      
+      # Get RLE values based on user selection
+      if(input$rle_source == "gbd") {
+        ep_rle <- rle(ep_aad, "gbd")
+      } else {
+        # Use custom values
+        custom_rle_values <- c(
+          input$rle_age1,
+          input$rle_age2,
+          input$rle_age3,
+          input$rle_age4,
+          input$rle_age5
+        )
+        ep_rle <- rle(ep_aad, "custom", custom_rle_values)
+      }
+      
+      # Define K and r for burden function
+      K <- 0  # Standard DALY calculation without age weighting
+      r <- 0  # Standard DALY calculation without discounting
       
       yll_ep <- array(dim = c(5,2,n))
       for(i in 1:5){
@@ -380,10 +433,13 @@ server <- function(input, output, session) {
       dsw_ep_nt <- runif(n, dsw_ep_nt_min, dsw_ep_nt_max)
       dsw_hd <- runif(n, dsw_hd_min, dsw_hd_max)
       
-      # Store disability weights for sensitivity analysis
+      # Store disability weights
       results$sampled_parameters$dsw_ep_tr <- dsw_ep_tr
       results$sampled_parameters$dsw_ep_nt <- dsw_ep_nt
       results$sampled_parameters$dsw_hd <- dsw_hd
+      results$current_params$dsw_ep_tr <- mean(dsw_ep_tr)
+      results$current_params$dsw_ep_nt <- mean(dsw_ep_nt)
+      results$current_params$dsw_hd <- mean(dsw_hd)
       
       A <- 0; L <- 1; a <- A
       yld_ep <- array(dim=c(5,2,n))
@@ -423,8 +479,17 @@ server <- function(input, output, session) {
         upper_ci = apply(daly_by_age,1,quantile,0.975)
       )
       
-      # Create parameter summary table with mean and 95% BCI
-      results$parameters_used <- tibble::tibble(
+      # Create parameter summary table with RLE values
+      rle_source_text <- ifelse(input$rle_source == "gbd", "GBD Defaults", "Custom Values")
+      rle_values_text <- if(input$rle_source == "gbd") {
+        "84.31, 76.76, 56.95, 35.17, 23.29"
+      } else {
+        paste(input$rle_age1, input$rle_age2, input$rle_age3, 
+              input$rle_age4, input$rle_age5, sep = ", ")
+      }
+      
+      # Create complete parameter table
+      numeric_params <- tibble::tibble(
         Parameter = c(
           "NCC Prevalence (%)",
           "Symptomatic NCC (%)",
@@ -470,6 +535,22 @@ server <- function(input, output, session) {
           quantile(dsw_hd, 0.975)
         )
       )
+      
+      # Format numeric values
+      numeric_params$Mean <- sprintf("%.4f", numeric_params$Mean)
+      numeric_params$`Lower 95% BCI` <- sprintf("%.4f", numeric_params$`Lower 95% BCI`)
+      numeric_params$`Upper 95% BCI` <- sprintf("%.4f", numeric_params$`Upper 95% BCI`)
+      
+      # Add RLE information as separate rows
+      rle_info <- tibble::tibble(
+        Parameter = c("RLE Source", "RLE Values (0-4, 5-14, 15-44, 45-64, 65+)"),
+        Mean = c(rle_source_text, rle_values_text),
+        `Lower 95% BCI` = c("", ""),
+        `Upper 95% BCI` = c("", "")
+      )
+      
+      # Combine all parameters into one dataframe
+      results$parameters_used <- bind_rows(numeric_params, rle_info)
       
       # Summary Results Table
       seroprev_mean <- mean(posterior_samples$pi)
@@ -551,18 +632,14 @@ server <- function(input, output, session) {
     showNotification("Calculation complete!", type = "message")
   })
   
-  
-  
-  
   # Function to generate prevalence vs DALY data
   generate_prevalence_daly_data <- function() {
-    req(input$N_tested, input$total_pop)
+    req(input$N_tested, input$total_pop, results$current_params)
     
     se_min <- ifelse(is.na(input$se_min) || input$se_min == "", 0.6, input$se_min)
     se_max <- ifelse(is.na(input$se_max) || input$se_max == "", 1.0, input$se_max)
     sp_min <- ifelse(is.na(input$sp_min) || input$sp_min == "", 0.6, input$sp_min)
     sp_max <- ifelse(is.na(input$sp_max) || input$sp_max == "", 1.0, input$sp_max)
-
     
     # Define reasonable ranges for sensitivity and specificity
     se_range <- seq(input$se_min, input$se_max, by = 0.05)
@@ -592,8 +669,7 @@ server <- function(input, output, session) {
         posterior_samples_sample <- rstan::extract(fit_sample)
         prevalence <- median(posterior_samples_sample$pi)
         
-        # Calculate DALYs for this prevalence (simplified calculation)
-        # Using the same burden calculation approach as main analysis
+        # Calculate DALYs for this prevalence using stored parameters
         daly_estimate <- calculate_daly_for_prevalence(prevalence, input$total_pop)
         
         prevalence_daly_points[[point_counter]] <- data.frame(
@@ -615,38 +691,43 @@ server <- function(input, output, session) {
   }
   
   # Helper function to calculate DALYs for a given prevalence
-
   calculate_daly_for_prevalence <- function(prevalence, total_pop) {
-    # Use the same parameter values as the main analysis
-    symp_ncc <- mean(results$sampled_parameters$symp_ncc)
-    ncc_ep <- mean(results$sampled_parameters$ncc_ep)
-    ncc_hd <- mean(results$sampled_parameters$ncc_hd)
-    cft_ep <- mean(results$sampled_parameters$cft_ep)
-    prop_ep_trt <- mean(results$sampled_parameters$prop_ep_trt)
-    dsw_ep_tr <- mean(results$sampled_parameters$dsw_ep_tr)
-    dsw_ep_nt <- mean(results$sampled_parameters$dsw_ep_nt)
-    dsw_hd <- mean(results$sampled_parameters$dsw_hd)
+    # Use stored parameter values
+    params <- results$current_params
     
-    # More accurate burden calculation matching your main model
+    # Get RLE values for YLL calculation
+    if(input$rle_source == "gbd") {
+      ep_rle <- rle(c(), "gbd")
+    } else {
+      custom_rle_values <- c(
+        input$rle_age1,
+        input$rle_age2,
+        input$rle_age3,
+        input$rle_age4,
+        input$rle_age5
+      )
+      ep_rle <- rle(c(), "custom", custom_rle_values)
+    }
+    
+    avg_life_expectancy <- mean(ep_rle)
+    
     ncc_cases <- total_pop * prevalence
-    symp_ncc_cases <- ncc_cases * symp_ncc
-    ep_cases <- symp_ncc_cases * ncc_ep
-    hd_cases <- symp_ncc_cases * ncc_hd
+    symp_ncc_cases <- ncc_cases * params$symp_ncc
+    ep_cases <- symp_ncc_cases * params$ncc_ep
+    hd_cases <- symp_ncc_cases * params$ncc_hd
     
     # Deaths from epilepsy
-    deaths <- ep_cases * cft_ep
+    deaths <- ep_cases * params$cft_ep
     
-    # YLL calculation (using same approach as main model)
-    # Use average life expectancy for simplicity
-    avg_life_expectancy <- 70
+    # YLL calculation using average RLE
     yll <- deaths * avg_life_expectancy
     
-    # YLD calculation (using same approach as main model)
-    treated_ep_cases <- ep_cases * prop_ep_trt
-    untreated_ep_cases <- ep_cases * (1 - prop_ep_trt)
+    # YLD calculation
+    treated_ep_cases <- ep_cases * params$prop_ep_trt
+    untreated_ep_cases <- ep_cases * (1 - params$prop_ep_trt)
     
-    yld_ep <- (treated_ep_cases * dsw_ep_tr) + (untreated_ep_cases * dsw_ep_nt)
-    yld_hd <- hd_cases * dsw_hd
+    yld_ep <- (treated_ep_cases * params$dsw_ep_tr) + (untreated_ep_cases * params$dsw_ep_nt)
+    yld_hd <- hd_cases * params$dsw_hd
     
     total_yld <- yld_ep + yld_hd
     total_daly <- yll + total_yld
@@ -696,6 +777,7 @@ server <- function(input, output, session) {
         )
     }
   })
+  
   output$download_prevalence_plot_png <- downloadHandler(
     filename = function() {
       paste0("prevalence_daly_plot_", Sys.Date(), ".png")
@@ -749,20 +831,16 @@ server <- function(input, output, session) {
       ggsave(file, plot = p, device = "pdf", width = 10, height = 8)
     }
   )
+  
   output$results_table <- renderTable({
     results$summary_data
   }, bordered=TRUE, align='l')
   
   output$parameter_table <- renderTable({
     if(!is.null(results$parameters_used)){
-      # Format the values for better display
-      formatted_params <- results$parameters_used
-      formatted_params$Mean <- sprintf("%.4f", formatted_params$Mean)
-      formatted_params$`Lower 95% BCI` <- sprintf("%.4f", formatted_params$`Lower 95% BCI`)
-      formatted_params$`Upper 95% BCI` <- sprintf("%.4f", formatted_params$`Upper 95% BCI`)
-      formatted_params
+      results$parameters_used
     }
-  }, bordered=TRUE, align='l')
+  }, bordered=TRUE, align='l', rownames = FALSE)
   
   output$sensitivity_plot <- renderPlot({
     if(!is.null(results$sampled_parameters) && !is.null(results$sampled_parameters$daly)){
@@ -772,7 +850,6 @@ server <- function(input, output, session) {
       
       # Create a data frame with all parameters, ensuring equal length
       param_data <- data.frame(
-        sero_prev_ncc = results$sampled_parameters$sero_prev_ncc[1:n_samples],
         prev_ncc = results$sampled_parameters$prev_ncc[1:n_samples],
         symp_ncc = results$sampled_parameters$symp_ncc[1:n_samples],
         ncc_ep = results$sampled_parameters$ncc_ep[1:n_samples],
@@ -809,7 +886,6 @@ server <- function(input, output, session) {
       
       # Parameter labels
       daly_items <- c(
-        "NCC Seroprevalence", 
         "NCC prevalence", 
         "NCC symptomatic",
         "E among NCC",
@@ -825,7 +901,7 @@ server <- function(input, output, session) {
       tornado(sa_daly_pcc, daly_items)
     }
   })
- 
+  
   # Add these reactive outputs
   output$results_ready <- reactive({
     !is.null(results$summary_data)
@@ -837,7 +913,6 @@ server <- function(input, output, session) {
   })
   outputOptions(output, "plot_ready", suspendWhenHidden = FALSE)  
   
-   
   # Download handlers
   output$download_prevalence_daly_data <- downloadHandler(
     filename = function() {
@@ -861,7 +936,7 @@ server <- function(input, output, session) {
       plot_data <- tryCatch({
         sp <- results$sampled_parameters
         
-        required_params <- c("sero_prev_ncc", "prev_ncc", "symp_ncc", "ncc_ep", 
+        required_params <- c("prev_ncc", "symp_ncc", "ncc_ep", 
                              "prop_ep_trt", "ncc_hd", "cft_ep", "dsw_ep_tr", 
                              "dsw_ep_nt", "dsw_hd", "daly")
         
@@ -870,7 +945,6 @@ server <- function(input, output, session) {
         }
         
         param_matrix <- cbind(
-          sero_prev_ncc = sp$sero_prev_ncc,
           prev_ncc = sp$prev_ncc,
           symp_ncc = sp$symp_ncc,
           ncc_ep = sp$ncc_ep,
@@ -896,7 +970,6 @@ server <- function(input, output, session) {
         sa_daly_pcc <- sa_pcc(daly_clean, param_matrix_clean)
         
         daly_items <- c(
-          "NCC Seroprevalence", 
           "NCC prevalence", 
           "NCC symptomatic",
           "E among NCC",
@@ -933,7 +1006,7 @@ server <- function(input, output, session) {
       plot_data <- tryCatch({
         sp <- results$sampled_parameters
         
-        required_params <- c("sero_prev_ncc", "prev_ncc", "symp_ncc", "ncc_ep", 
+        required_params <- c("prev_ncc", "symp_ncc", "ncc_ep", 
                              "prop_ep_trt", "ncc_hd", "cft_ep", "dsw_ep_tr", 
                              "dsw_ep_nt", "dsw_hd", "daly")
         
@@ -942,7 +1015,6 @@ server <- function(input, output, session) {
         }
         
         param_matrix <- cbind(
-          sero_prev_ncc = sp$sero_prev_ncc,
           prev_ncc = sp$prev_ncc,
           symp_ncc = sp$symp_ncc,
           ncc_ep = sp$ncc_ep,
@@ -968,7 +1040,6 @@ server <- function(input, output, session) {
         sa_daly_pcc <- sa_pcc(daly_clean, param_matrix_clean)
         
         daly_items <- c(
-          "NCC Seroprevalence", 
           "NCC prevalence", 
           "NCC symptomatic",
           "E among NCC",
